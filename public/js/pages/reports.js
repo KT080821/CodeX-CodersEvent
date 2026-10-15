@@ -89,3 +89,5 @@ const ReportsPage = {
       </table></div></div>`;
   }
 };
+
+window.ReportsPage = ReportsPage;

@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db/schema');
 
 function requireCoordinator(req, res, next) {
-  if (req.session.user.role !== 'coordinator') return res.status(403).json({ error: 'Access denied' });
+  if (!['coordinator', 'ADMIN'].includes(req.session.user.role)) return res.status(403).json({ error: 'Access denied' });
   next();
 }
 
@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
     LEFT JOIN individual_assets a ON ir.asset_id = a.id
     JOIN users u ON ir.issued_by = u.id
   `;
-  if (user.role === 'coordinator') {
+  if (['coordinator', 'ADMIN'].includes(user.role)) {
     rows = db.prepare(baseQ + ' ORDER BY ir.due_date ASC').all();
   } else {
     const student = db.prepare('SELECT id FROM students WHERE user_id = ?').get(user.id);

@@ -14,8 +14,13 @@ const App = {
     { id: 'issues', label: 'Issues', icon: '📤' },
     { id: 'returns', label: 'Returns', icon: '📥' },
     { id: 'renewals', label: 'Renewals', icon: '🔄' },
+    { id: 'issue-requests', label: 'Issue Requests', icon: '📨' },
     { section: 'Analytics' },
     { id: 'reports', label: 'Reports', icon: '📋' },
+  ],
+  ADMIN_NAV: [
+    { section: 'Administration' },
+    { id: 'users', label: 'User Management', icon: '🛡️' },
   ],
 
   STUDENT_NAV: [
@@ -24,32 +29,31 @@ const App = {
   ],
 
   init() {
-    // Toggle between login and register panels
-    document.getElementById('show-register-btn').addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('login-panel').style.display = 'none';
-      document.getElementById('register-panel').style.display = 'block';
-      document.getElementById('login-box-title').textContent = 'Create Account';
+    this.googleRegistration = new URLSearchParams(window.location.search).get('oauth') === 'complete';
+    API.auth.googleConfig().then(config => {
+      if (!config.enabled) {
+        const googleWrap = document.getElementById('google-login-wrap');
+        if (googleWrap) googleWrap.classList.add('hidden');
+      }
+    }).catch(() => {
+      const googleWrap = document.getElementById('google-login-wrap');
+      if (googleWrap) googleWrap.classList.add('hidden');
     });
+    const mobileMenu = document.getElementById('mobile-menu-btn');
+    if (mobileMenu) {
+      mobileMenu.addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+    }
+    const dateEl = document.getElementById('topbar-date');
+    if (dateEl) {
+      dateEl.textContent = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date());
+    }
+    // Toggle between login and register panels
     document.getElementById('show-login-btn').addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('register-panel').style.display = 'none';
       document.getElementById('login-panel').style.display = 'block';
       document.getElementById('login-box-title').textContent = 'Inventory Management';
     });
-
-    // Load programmes into register dropdown
-    API.programmes.list().then(progs => {
-      const sel = document.getElementById('reg-programme-sel');
-      if (sel) {
-        progs.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.name;
-          opt.textContent = p.name;
-          sel.appendChild(opt);
-        });
-      }
-    }).catch(() => {});
 
     // Register form
     document.getElementById('register-form').addEventListener('submit', async (e) => {
@@ -62,10 +66,16 @@ const App = {
       const data = {};
       new FormData(form).forEach((v, k) => { data[k] = v; });
       try {
-        const result = await API.post('/api/auth/register', data);
-        successEl.textContent = '✅ ' + result.message;
+        if (!this.googleRegistration) throw new Error('Please continue with Google to create a student account');
+        const result = await API.auth.registerGoogle(data);
+        successEl.textContent = '✅ ' + (result.message || 'Google registration completed');
         successEl.classList.remove('hidden');
         form.reset();
+        if (this.googleRegistration) {
+          this.user = result;
+          this.showApp();
+          return;
+        }
         // Auto-switch to login after 2 seconds
         setTimeout(() => {
           document.getElementById('register-panel').style.display = 'none';
@@ -97,14 +107,31 @@ const App = {
     });
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
-      await API.auth.logout();
-      this.user = null;
-      document.getElementById('main-app').classList.add('hidden');
-      document.getElementById('login-screen').classList.add('active');
-      document.getElementById('login-form').reset();
+      try {
+        await API.auth.logout();
+      } finally {
+        this.user = null;
+        this.googleRegistration = false;
+        document.getElementById('main-app').classList.add('hidden');
+        document.getElementById('login-screen').classList.add('active');
+        document.getElementById('login-panel').style.display = 'block';
+        document.getElementById('register-panel').style.display = 'none';
+        document.getElementById('login-box-title').textContent = 'Inventory Management';
+        document.getElementById('login-form').reset();
+        document.getElementById('register-form').reset();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('oauth');
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      }
     });
 
     // Check if already logged in
+    if (this.googleRegistration) {
+      document.getElementById('login-panel').style.display = 'none';
+      document.getElementById('register-panel').style.display = 'block';
+      document.getElementById('login-box-title').textContent = 'Complete Google Registration';
+      document.querySelector('#register-panel .verification-note').textContent = 'Your Google email is verified. Set a password and complete your student details to finish signup.';
+    }
     API.auth.me().then(user => {
       this.user = user;
       this.showApp();
@@ -120,15 +147,18 @@ const App = {
 
     // User info
     const userInfoEl = document.getElementById('user-info');
+    const safeUser = (value) => API.escapeHtml(value || '');
     userInfoEl.innerHTML = `
-      <strong>${this.user.username}</strong>
+      <strong>${safeUser(this.user.username)}</strong>
       <span class="badge ${this.user.role === 'coordinator' ? 'badge-purple' : 'badge-blue'}" style="font-size:10px;">${this.user.role}</span>
-      ${this.user.profile ? `<div style="margin-top:4px;">${this.user.profile.name}</div>` : ''}
+      ${this.user.profile ? `<div style="margin-top:4px;">${safeUser(this.user.profile.name)}</div>` : ''}
     `;
 
     // Build nav
     const nav = document.getElementById('sidebar-nav');
-    const navItems = this.user.role === 'coordinator' ? this.COORDINATOR_NAV : this.STUDENT_NAV;
+    const navItems = this.user.role === 'student'
+      ? this.STUDENT_NAV
+      : [...this.COORDINATOR_NAV, ...(this.user.role === 'ADMIN' ? this.ADMIN_NAV : [])];
     nav.innerHTML = navItems.map(item => {
       if (item.section) return `<div class="nav-section">${item.section}</div>`;
       return `<button class="nav-item" data-page="${item.id}" onclick="App.navigate('${item.id}')">
@@ -137,12 +167,14 @@ const App = {
     }).join('');
 
     // Navigate to default page
-    const defaultPage = this.user.role === 'coordinator' ? 'dashboard' : 'portal';
+    const defaultPage = this.user.role === 'student' ? 'portal' : 'dashboard';
     this.navigate(defaultPage);
   },
 
   navigate(pageId) {
     this.currentPage = pageId;
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.remove('open');
     // Update nav active state
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.page === pageId);
@@ -158,10 +190,13 @@ const App = {
       renewals: RenewalsPage,
       reports: ReportsPage,
       portal: StudentPortalPage,
+      'issue-requests': IssueRequestsPage,
+      users: UsersPage,
     };
     const page = pages[pageId];
     if (page) page.render();
   }
 };
 
+window.App = App;
 document.addEventListener('DOMContentLoaded', () => App.init());

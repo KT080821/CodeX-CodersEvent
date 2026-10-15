@@ -11,14 +11,15 @@
     <!-- Login Screen -->
     <div id="login-screen" class="screen active">
       <div class="login-box">
-        <div class="login-logo">
+        <div class="login-logo brand-mark">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
             <rect width="48" height="48" rx="12" fill="#2563eb"/>
             <path d="M12 16h24M12 24h24M12 32h16" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
         </div>
+        <div class="eyebrow">NFSU • DEPARTMENT SERVICES</div>
         <h1 id="login-box-title">Inventory Management</h1>
-        <p class="login-subtitle">Department Item Issue & Tracking System</p>
+        <p class="login-subtitle">A smarter way to issue, track and care for every department asset.</p>
         <!-- Login Form -->
         <div id="login-panel">
           <form id="login-form">
@@ -33,13 +34,9 @@
             <div id="login-error" class="error-msg hidden"></div>
             <button type="submit" class="btn btn-primary btn-full">Sign In</button>
           </form>
-          <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--gray-500);">
-            New student? <a href="#" id="show-register-btn" style="color:var(--primary);font-weight:600;">Register here</a>
-          </p>
-          <div class="demo-creds">
-            <p><strong>Demo Credentials</strong></p>
-            <div class="cred-row"><span class="badge badge-purple">Coordinator</span> coordinator / coord123</div>
-            <div class="cred-row"><span class="badge badge-blue">Student</span> student001 / student123</div>
+          <div id="google-login-wrap" class="auth-provider-wrap">
+            <div class="auth-divider"><span>or</span></div>
+            <a class="btn btn-google btn-full" href="/api/auth/google">Continue with Google</a>
           </div>
         </div>
 
@@ -58,7 +55,11 @@
               <div class="form-group">
                 <label>Programme *</label>
                 <select name="programme" id="reg-programme-sel" required style="width:100%;padding:9px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13.5px;background:white;">
-                  <option value="">Select programme…</option>
+                  <option value="">Select programme...</option>
+                  <option value="Btech CSE">Btech CSE</option>
+                  <option value="Btech Civil">Btech Civil</option>
+                  <option value="Msc DFIS">Msc DFIS</option>
+                  <option value="Mtech Cyber">Mtech Cyber</option>
                 </select>
               </div>
               <div class="form-group">
@@ -66,8 +67,8 @@
                 <input type="number" name="semester" min="1" max="8" placeholder="1" required>
               </div>
               <div class="form-group">
-                <label>Email</label>
-                <input type="email" name="email" placeholder="your@email.com">
+                <label>Email address *</label>
+                <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
               </div>
               <div class="form-group">
                 <label>Phone</label>
@@ -79,13 +80,14 @@
               </div>
               <div class="form-group">
                 <label>Password *</label>
-                <input type="password" name="password" placeholder="choose a password" required>
+                <input type="password" name="password" placeholder="choose a password (10+ characters)" minlength="10" required autocomplete="new-password">
               </div>
             </div>
             <div id="register-error" class="error-msg hidden"></div>
             <div id="register-success" class="hidden" style="padding:10px 14px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;margin-bottom:12px;"></div>
             <button type="submit" class="btn btn-primary btn-full">Create Account</button>
           </form>
+          <p class="verification-note">Student accounts are created securely through Google OAuth.</p>
           <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--gray-500);">
             Already have an account? <a href="#" id="show-login-btn" style="color:var(--primary);font-weight:600;">Sign in</a>
           </p>
@@ -102,8 +104,9 @@
             <rect width="48" height="48" rx="10" fill="#2563eb"/>
             <path d="M12 16h24M12 24h24M12 32h16" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
-          <span>Inventory</span>
+          <div><span class="brand-name">NFSU Inventory</span><small>Department services</small></div>
         </div>
+        <div class="sidebar-intro">COMMAND CENTER <span>2026</span></div>
         <nav id="sidebar-nav"></nav>
         <div class="sidebar-footer">
           <div id="user-info"></div>
@@ -113,6 +116,11 @@
 
       <!-- Main Content -->
       <main id="main-content">
+        <header class="app-topbar">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Open navigation">☰</button>
+          <div class="topbar-title"><span class="topbar-dot"></span> Department Inventory Portal</div>
+          <div class="topbar-meta"><span class="live-dot"></span> System operational <span class="topbar-date" id="topbar-date"></span></div>
+        </header>
         <div id="page-container"></div>
       </main>
     </div>
@@ -129,6 +137,8 @@
   <script src="/js/pages/reports.js"></script>
   <script src="/js/pages/programmes.js"></script>
   <script src="/js/pages/student-portal.js"></script>
+  <script src="/js/pages/issue-requests.js"></script>
+  <script src="/js/pages/users.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

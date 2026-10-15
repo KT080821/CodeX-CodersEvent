@@ -357,3 +357,5 @@ const InventoryPage = {
     }
   }
 };
+
+window.InventoryPage = InventoryPage;

@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db/schema');
 
 function requireCoordinator(req, res, next) {
-  if (req.session.user.role !== 'coordinator') return res.status(403).json({ error: 'Access denied' });
+  if (!['coordinator', 'ADMIN'].includes(req.session.user.role)) return res.status(403).json({ error: 'Access denied' });
   next();
 }
 

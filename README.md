@@ -28,16 +28,57 @@ npm start
 
 The system auto-creates the database and seeds demo data on first run.
 
+### Production security configuration
+
+Set a long, random session secret and run behind HTTPS in production:
+
+```bash
+SESSION_SECRET="generate-a-long-random-value" NODE_ENV=production npm start
+```
+
+The server applies security headers, strict HTTP-only/SameSite cookies, request
+body limits, authentication throttling, API rate limiting, CSRF protection for
+state-changing requests, session ID rotation after login, role-based access
+checks, and centralized error handling. Keep `data/inventory.db` outside public
+web hosting and do not expose the `SESSION_SECRET` in source control.
+
+### Google signup configuration
+
+Student accounts are created through Google OAuth. Google verifies the
+student's email address, then the student sets a password and completes their programme,
+enrolment, semester, and contact details in the portal. Configure:
+
+```bash
+GOOGLE_CLIENT_ID="your-google-oauth-client-id"
+GOOGLE_CLIENT_SECRET="your-google-oauth-client-secret"
+APP_BASE_URL="https://your-domain.example"
+```
+
+Add this Google OAuth redirect URI in Google Cloud Console:
+`https://your-domain.example/api/auth/google/callback`
+
+### Roles and issue requests
+
+Students can browse available inventory from their dashboard and submit
+quantity-based issue requests. Coordinators review and approve or reject those
+requests, and can add or remove students. An `ADMIN` can access every
+operational screen and manage coordinator, student, and administrator accounts.
+
+To bootstrap the first administrator on a fresh or existing database, set
+these variables before starting the server. They are used only when no
+administrator exists:
+
+```bash
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="use-a-long-unique-password"
+ADMIN_EMAIL="admin@example.com"
+```
+
 ---
 
-## 🔑 Demo Login Credentials
-
-| Role | Username | Password |
-|------|----------|----------|
-| **Coordinator** | `coordinator` | `coord123` |
-| **Student 1** | `student001` | `student123` |
-| **Student 2** | `student002` | `student123` |
-| **Student 3** | `student003` | `student123` |
+For local demonstrations only, set `SEED_DEMO_DATA=true` before the first
+database initialization and provide `DEMO_COORDINATOR_PASSWORD` and
+`DEMO_STUDENT_PASSWORD`. Never enable demo seeding in production.
 
 ---
 

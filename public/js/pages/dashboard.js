@@ -215,3 +215,5 @@ const DashboardPage = {
     }
   }
 };
+
+window.DashboardPage = DashboardPage;

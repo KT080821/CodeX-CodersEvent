@@ -86,3 +86,5 @@ const ReturnsPage = {
     }
   }
 };
+
+window.ReturnsPage = ReturnsPage;

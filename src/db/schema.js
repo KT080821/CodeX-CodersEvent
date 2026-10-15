@@ -1,6 +1,7 @@
 // sql.js based SQLite wrapper - pure JavaScript, no native build needed
 const initSqlJs = require('sql.js');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,6 +11,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 let db = null;
 let SQL = null;
+let transactionDepth = 0;
 
 function saveDb() {
   const data = db.export();
@@ -19,7 +21,7 @@ function saveDb() {
 // Auto-save after mutations
 function run(sql, params = []) {
   db.run(sql, params);
-  saveDb();
+  if (!transactionDepth) saveDb();
 }
 
 function get(sql, params = []) {
@@ -45,7 +47,24 @@ function all(sql, params = []) {
 
 function exec(sql) {
   db.run(sql);
-  saveDb();
+  if (!transactionDepth) saveDb();
+}
+
+function transaction(callback) {
+  if (transactionDepth) return callback();
+  db.run('BEGIN');
+  transactionDepth += 1;
+  try {
+    const result = callback();
+    db.run('COMMIT');
+    transactionDepth -= 1;
+    saveDb();
+    return result;
+  } catch (error) {
+    db.run('ROLLBACK');
+    transactionDepth -= 1;
+    throw error;
+  }
 }
 
 // A "statement" object that mimics better-sqlite3's API
@@ -54,9 +73,13 @@ function prepare(sql) {
     run: (...args) => {
       const params = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
       db.run(sql, params);
-      saveDb();
-      // Get last insert rowid
-      const rowid = get('SELECT last_insert_rowid() as id');
+      if (!transactionDepth) saveDb();
+      // sql.js does not reliably expose last_insert_rowid() after db.run().
+      // Resolve the inserted row from the table while the database is single-threaded.
+      const insertMatch = sql.match(/insert\s+(?:or\s+\w+\s+)?into\s+["`]?([a-z_]+)["`]?/i);
+      const rowid = insertMatch
+        ? get(`SELECT id FROM "${insertMatch[1]}" ORDER BY id DESC LIMIT 1`)
+        : null;
       return { lastInsertRowid: rowid ? rowid.id : null };
     },
     get: (...args) => {
@@ -84,9 +107,32 @@ function initSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('coordinator','student')),
+      role TEXT NOT NULL CHECK(role IN ('ADMIN','coordinator','student')),
       created_at TEXT DEFAULT (datetime('now'))
     );`);
+  // Backward-compatible auth fields for Google OAuth.
+  try { db.run(`ALTER TABLE users ADD COLUMN email TEXT`); } catch (_) {}
+  try { db.run(`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1`); } catch (_) {}
+  try { db.run(`ALTER TABLE users ADD COLUMN google_sub TEXT`); } catch (_) {}
+  const userTable = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
+  if (userTable && !String(userTable.sql).includes("'ADMIN'")) {
+    db.run(`PRAGMA foreign_keys=OFF;
+      CREATE TABLE users_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('ADMIN','coordinator','student')),
+        created_at TEXT DEFAULT (datetime('now')),
+        email TEXT,
+        email_verified INTEGER NOT NULL DEFAULT 1,
+        google_sub TEXT
+      );
+      INSERT INTO users_migrated (id, username, password_hash, role, created_at, email, email_verified, google_sub)
+        SELECT id, username, password_hash, role, created_at, email, email_verified, google_sub FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_migrated RENAME TO users;
+      PRAGMA foreign_keys=ON;`);
+  }
   db.run(`
     CREATE TABLE IF NOT EXISTS students (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +144,20 @@ function initSchema() {
       email TEXT,
       phone TEXT,
       created_at TEXT DEFAULT (datetime('now'))
+    );`);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS issue_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL REFERENCES students(id),
+      item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+      asset_id INTEGER REFERENCES individual_assets(id),
+      quantity INTEGER NOT NULL DEFAULT 1,
+      purpose TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT DEFAULT (datetime('now')),
+      decided_at TEXT,
+      decided_by INTEGER REFERENCES users(id),
+      decision_note TEXT
     );`);
   db.run(`
     CREATE TABLE IF NOT EXISTS storage_locations (
@@ -220,8 +280,13 @@ function seedData() {
     });
   }
 
+  if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD && !get("SELECT id FROM users WHERE role = 'ADMIN'")) {
+    run('INSERT INTO users (username, password_hash, role, email, email_verified) VALUES (?,?,?,?,1)', [
+      process.env.ADMIN_USERNAME, bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10), 'ADMIN', process.env.ADMIN_EMAIL || null
+    ]);
+  }
   const userCount = get('SELECT COUNT(*) as c FROM users').c;
-  if (userCount > 0) return;
+  if (userCount > 0 || process.env.SEED_DEMO_DATA !== 'true') return;
 
   // Seed default programmes (also for fresh DB)
   const progs = [
@@ -238,11 +303,12 @@ function seedData() {
   });
 
   const hash = (p) => bcrypt.hashSync(p, 10);
+  const demoPassword = name => process.env[name] || crypto.randomBytes(32).toString('hex');
 
-  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['coordinator', hash('coord123'), 'coordinator']);
-  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student001', hash('student123'), 'student']);
-  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student002', hash('student123'), 'student']);
-  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student003', hash('student123'), 'student']);
+  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['coordinator', hash(demoPassword('DEMO_COORDINATOR_PASSWORD')), 'coordinator']);
+  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student001', hash(demoPassword('DEMO_STUDENT_PASSWORD')), 'student']);
+  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student002', hash(demoPassword('DEMO_STUDENT_PASSWORD')), 'student']);
+  run('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', ['student003', hash(demoPassword('DEMO_STUDENT_PASSWORD')), 'student']);
 
   run('INSERT INTO students (user_id, name, enrolment_number, programme, semester, email, phone) VALUES (?,?,?,?,?,?,?)', [2, 'Aanya Sharma', 'MSDFIS2024001', 'M.Sc. DFIS', 1, 'aanya@example.com', '9876543210']);
   run('INSERT INTO students (user_id, name, enrolment_number, programme, semester, email, phone) VALUES (?,?,?,?,?,?,?)', [3, 'Rohan Mehta', 'MSDFIS2024002', 'M.Sc. DFIS', 1, 'rohan@example.com', '9876543211']);
@@ -264,6 +330,20 @@ function seedData() {
   }
 }
 
+function repairStudentUserLinks() {
+  const orphaned = all('SELECT id FROM students WHERE user_id IS NULL OR user_id = 0 ORDER BY id');
+  const availableUsers = all(`
+    SELECT u.id FROM users u
+    LEFT JOIN students s ON s.user_id = u.id
+    WHERE u.role = 'student' AND s.id IS NULL
+    ORDER BY u.id
+  `);
+  orphaned.forEach((student, index) => {
+    const user = availableUsers[index];
+    if (user) run('UPDATE students SET user_id = ? WHERE id = ?', [user.id, student.id]);
+  });
+}
+
 async function initDb() {
   SQL = await initSqlJs();
   if (fs.existsSync(DB_PATH)) {
@@ -274,6 +354,7 @@ async function initDb() {
   }
   initSchema();
   seedData();
+  repairStudentUserLinks();
 }
 
-module.exports = { prepare, run, get, all, exec, saveDb, initDb };
+module.exports = { prepare, run, get, all, exec, transaction, saveDb, initDb };

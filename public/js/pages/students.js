@@ -32,6 +32,7 @@ const StudentsPage = {
                     <td>
                       <button class="btn btn-xs btn-secondary" onclick="StudentsPage.viewHistory(${s.id}, '${s.name}')">History</button>
                       <button class="btn btn-xs btn-secondary" onclick="StudentsPage.showEdit(${s.id})">Edit</button>
+                      <button class="btn btn-xs btn-danger" onclick="StudentsPage.remove(${s.id}, '${s.name.replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                   </tr>`).join('')}
               </tbody>
@@ -68,6 +69,15 @@ const StudentsPage = {
         </tr>`).join('')}</tbody>
       </table></div>`;
     modal(`Issue History: ${name}`, body, '', 'modal-lg');
+  },
+
+  async remove(id, name) {
+    if (!confirm(`Delete student ${name}? This cannot be undone.`)) return;
+    try {
+      await API.students.remove(id);
+      toast('Student deleted', 'success');
+      this.render();
+    } catch (e) { toast(e.message, 'danger'); }
   },
 
   showAdd() {
@@ -128,3 +138,5 @@ const StudentsPage = {
     }
   }
 };
+
+window.StudentsPage = StudentsPage;

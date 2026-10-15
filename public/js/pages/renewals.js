@@ -76,3 +76,5 @@ const RenewalsPage = {
     } catch(e) { toast(e.message, 'danger'); }
   }
 };
+
+window.RenewalsPage = RenewalsPage;

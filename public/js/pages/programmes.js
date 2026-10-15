@@ -129,3 +129,5 @@ const ProgrammesPage = {
     }
   }
 };
+
+window.ProgrammesPage = ProgrammesPage;

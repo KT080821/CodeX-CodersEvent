@@ -170,6 +170,7 @@ const IssuesPage = {
     try {
       const result = await API.issues.create(data);
       document.querySelector('.modal-overlay').remove();
+      toast(result.message || 'Item issued successfully', 'success');
       // Show acknowledgement
       const ackBody = `
         <div class="alert alert-success">✅ ${result.message}</div>
@@ -188,3 +189,5 @@ const IssuesPage = {
     }
   }
 };
+
+window.IssuesPage = IssuesPage;

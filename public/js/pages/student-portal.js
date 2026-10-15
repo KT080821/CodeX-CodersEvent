@@ -4,10 +4,12 @@ const StudentPortalPage = {
     const container = document.getElementById('page-container');
     container.innerHTML = loading();
     try {
-      const [issues, overdue, upcoming] = await Promise.all([
+      const [issues, overdue, upcoming, items, requests] = await Promise.all([
         API.issues.list(),
         API.reports.overdue(),
         API.reports.upcoming(),
+        API.inventory.items(),
+        API.issueRequests.mine(),
       ]);
 
       const activeIssues = issues.filter(i => i.status === 'issued' || i.status === 'overdue');
@@ -27,6 +29,20 @@ const StudentPortalPage = {
         <div class="alert alert-warning">
           🔔 You have <strong>${upcoming.length}</strong> item(s) due within 3 days. Consider requesting a renewal if needed.
         </div>` : ''}
+
+        <div class="card mb-4">
+          <div class="card-header"><h3>Available Items</h3><span class="badge badge-green">${items.filter(i => i.available_quantity > 0).length}</span></div>
+          <div class="card-body" style="padding:0;"><div class="table-container"><table><thead><tr><th>Item</th><th>Category</th><th>Available</th><th>Request</th></tr></thead><tbody>
+          ${items.filter(i => i.available_quantity > 0).map(i => `<tr><td><strong>${i.name}</strong><br><span class="text-muted text-sm">${i.item_code}</span></td><td>${i.category}</td><td>${i.available_quantity}</td><td><button class="btn btn-xs btn-primary" onclick="StudentPortalPage.requestItem(${i.id})">Request Item</button></td></tr>`).join('') || `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><p>No items are currently available</p></div></td></tr>`}
+          </tbody></table></div></div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><h3>My Issue Requests</h3></div>
+          <div class="card-body" style="padding:0;"><div class="table-container"><table><thead><tr><th>Item</th><th>Qty</th><th>Requested</th><th>Status</th></tr></thead><tbody>
+          ${requests.map(r => `<tr><td>${r.item_name}<br><code>${r.item_code}</code></td><td>${r.quantity}</td><td>${fmtDate(r.requested_at)}</td><td>${statusBadge(r.status)}</td></tr>`).join('') || `<tr><td colspan="4"><div class="empty-state" style="padding:24px;"><p>No requests yet</p></div></td></tr>`}
+          </tbody></table></div></div>
+        </div>
 
         <!-- Active Issues -->
         <div class="card mb-4">
@@ -127,4 +143,37 @@ const StudentPortalPage = {
       this.render();
     } catch(e) { toast(e.message, 'danger'); }
   }
+  ,
+  async requestItem(itemId) {
+    try {
+      const item = await API.inventory.item(itemId);
+      const body = `<form id="issue-request-form">
+        <div class="alert alert-info"><strong>${item.name}</strong><br><span class="text-muted">${item.available_quantity} available</span></div>
+        <div class="form-group"><label>Quantity *</label><input name="quantity" type="number" min="1" max="${item.max_issue_quantity}" value="1" required></div>
+        <div class="form-group"><label>Purpose</label><textarea name="purpose" rows="3" maxlength="500" placeholder="Why do you need this item?"></textarea></div>
+        <div id="issue-request-error" class="error-msg hidden"></div>
+      </form>`;
+      modal('Request Item', body, '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button><button class="btn btn-primary" onclick="StudentPortalPage.submitRequest(' + itemId + ')">Send Request</button>');
+    } catch (e) { toast(e.message, 'danger'); }
+  },
+
+  async submitRequest(itemId) {
+    const form = document.getElementById('issue-request-form');
+    const errorEl = document.getElementById('issue-request-error');
+    try {
+      const data = formData(form);
+      data.item_id = itemId;
+      data.quantity = Number(data.quantity);
+      const result = await API.issueRequests.create(data);
+      const overlay = document.querySelector('.modal-overlay');
+      if (overlay) overlay.remove();
+      toast(result.message || 'Item requested successfully', 'success');
+      this.render();
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.classList.remove('hidden');
+    }
+  }
 };
+
+window.StudentPortalPage = StudentPortalPage;
