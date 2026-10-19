@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: inventory-system
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_BASE_URL
+        value: https://inventory-system.onrender.com
+      - key: SEED_DEMO_DATA
+        value: "false"
+    disk:
+      name: inventory-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
